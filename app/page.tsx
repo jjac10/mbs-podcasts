@@ -2,6 +2,8 @@
 
 import { ChangeEvent, DragEvent, useMemo, useRef, useState } from 'react'
 import {
+  AlertTriangle,
+  CheckCircle2,
   Clock3,
   FileText,
   LoaderCircle,
@@ -17,12 +19,19 @@ type UploadFile = {
 
 const ACCEPTED_TYPES = ['application/pdf', 'text/plain']
 
+type GeneratePodcastResponse = {
+  dialogue?: string
+  error?: string
+}
+
 export default function Home() {
   const [files, setFiles] = useState<UploadFile[]>([])
   const [isDragging, setIsDragging] = useState(false)
   const [voice, setVoice] = useState('neutro')
   const [duration, setDuration] = useState('5')
   const [isGenerating, setIsGenerating] = useState(false)
+  const [dialogue, setDialogue] = useState('')
+  const [errorMessage, setErrorMessage] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
 
   const totalSize = useMemo(
@@ -60,11 +69,38 @@ export default function Home() {
     setFiles((prev) => prev.filter((item) => item.id !== id))
   }
 
-  const handleGeneratePodcast = () => {
-    setIsGenerating(true)
-    setTimeout(() => {
+  const handleGeneratePodcast = async () => {
+    try {
+      setIsGenerating(true)
+      setErrorMessage('')
+      setDialogue('')
+
+      const formData = new FormData()
+      formData.append('voice', voice)
+      formData.append('duration', duration)
+
+      files.forEach(({ file }) => {
+        formData.append('files', file, file.name)
+      })
+
+      const response = await fetch('/api/generate-podcast', {
+        method: 'POST',
+        body: formData,
+      })
+
+      const payload = (await response.json()) as GeneratePodcastResponse
+
+      if (!response.ok) {
+        setErrorMessage(payload.error ?? 'No se pudo generar el podcast.')
+        return
+      }
+
+      setDialogue(payload.dialogue ?? '')
+    } catch {
+      setErrorMessage('Hubo un error de red al generar el podcast. Inténtalo de nuevo.')
+    } finally {
       setIsGenerating(false)
-    }, 1800)
+    }
   }
 
   return (
@@ -73,8 +109,7 @@ export default function Home() {
         <p className="text-sm uppercase tracking-[0.25em] text-cyan-300">Podcast IA</p>
         <h1 className="text-3xl font-bold md:text-5xl">Convierte tus documentos en audio en segundos</h1>
         <p className="max-w-2xl text-sm text-slate-300 md:text-base">
-          Sube uno o varios archivos para crear un podcast con voz sintética. Todo el estado se maneja localmente,
-          sin llamadas externas.
+          Sube uno o varios archivos para crear un podcast con voz sintética usando OpenAI.
         </p>
       </section>
 
@@ -166,6 +201,25 @@ export default function Home() {
               'Generar podcast'
             )}
           </button>
+
+          {errorMessage && (
+            <div className="flex items-start gap-2 rounded-lg border border-red-400/40 bg-red-400/10 p-3 text-sm text-red-200">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+              <p>{errorMessage}</p>
+            </div>
+          )}
+
+          {dialogue && (
+            <div className="space-y-3 rounded-xl border border-emerald-400/30 bg-emerald-400/10 p-4">
+              <p className="inline-flex items-center gap-2 text-sm font-medium text-emerald-200">
+                <CheckCircle2 className="h-4 w-4" />
+                Guion generado
+              </p>
+              <pre className="max-h-96 overflow-auto whitespace-pre-wrap rounded-lg bg-slate-950/60 p-3 text-sm text-slate-100">
+                {dialogue}
+              </pre>
+            </div>
+          )}
         </div>
 
         <form className="flex h-fit flex-col gap-4 rounded-xl border border-slate-800 bg-slate-950/50 p-4">
